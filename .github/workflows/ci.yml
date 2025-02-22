@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: bookstore_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js 18.20.5
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.20.5'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run Linter
+      run: npm run lint
+
+    - name: Wait for MySQL to be ready
+      run: |
+        for i in {1..30}; do
+          if mysqladmin ping -h127.0.0.1 --silent; then
+            echo "MySQL is ready!"
+            break
+          fi
+          echo "Waiting for MySQL to start..."
+          sleep 10
+        done
+
+    - name: Run Jest tests
+      env:
+        DATABASE_HOST: 127.0.0.1
+        DATABASE_PORT: 3306
+        DATABASE_USER: root
+        DATABASE_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+        DATABASE_DATABASE: bookstore_test
+        
+      run: npm test
+      
